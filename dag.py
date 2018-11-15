@@ -3,6 +3,7 @@ import networkx
 import numpy
 import itertools
 import collections
+import unittest
 
 
 def random_dag(n, p=0.5, weakly_connected=True):
@@ -21,8 +22,6 @@ def random_dag(n, p=0.5, weakly_connected=True):
     assert(networkx.is_directed_acyclic_graph(G))
 
     return G
-
-
 
 
 def _window(seq, n=2):
@@ -106,11 +105,8 @@ class PrecedenceGraph(networkx.DiGraph):
         # Unscheduled tasks found. This should not happen.
         assert(len([n for group in clusters for n in group]) == len(self))
 
-        print(clusters)
         return clusters
 
-
-import unittest
 
 class PrecedenceGraphTest(unittest.TestCase):
     test_case = (
@@ -135,9 +131,19 @@ class PrecedenceGraphTest(unittest.TestCase):
         adjlist = self.test_case[0].strip().split('\n')
         g = networkx.parse_adjlist(adjlist,
                                    create_using=PrecedenceGraph())
-        print(g.clustering())
         for a, b in zip(self.test_case[1], g.clustering()):
             self.assertSetEqual(set(a), set(b))
+
+    def test_lineage(self):
+        lineage = {'a': {'lineage': {'inputs': [1, 2, 3], 'outputs': [4, 5, 6]}},
+                   'b': {'lineage': {'inputs': [4, 5, 6], 'outputs': []}},
+                   'c': {'lineage': {'inputs': [5], 'outputs': []}}}
+        lineage = [(k, v['lineage']['inputs'], v['lineage']['outputs']) for k, v in lineage.items()]
+
+        self.assertListEqual([('b', 'a', {'links': {4, 5, 6}}), ('c', 'a', {'links': {5}})],
+                             list(from_lineage(lineage).edges(data=True)))
+
+
 
 
 def from_lineage(lineage):
@@ -145,17 +151,16 @@ def from_lineage(lineage):
 
     Parameters
     ----------
-    lineage: dictionary of dictionaries
-        A dictionary of dictionaries lineage representation.
+    lineage: list of lists
+        A list of lists lineage representation.
 
     Examples
     --------
-    >>> lineage = {'a': {'lineage': {'inputs': [1, 2, 3], 'outputs': [4, 5, 6]}},
-                   'b': {'lineage': {'inputs': [4, 5, 6], 'outputs': []}},
-                   'c': {'lineage': {'inputs': [5], 'outputs': []}}}
+    >>> lineage = [('a', [1, 2, 3], [4, 5, 6]),
+                   ('b', [4, 5, 6], []),
+                   ('c', [5], [])]
     >>> G = from_lineage(lineage)
     """
-    lineage = [(k, v['lineage']['inputs'], v['lineage']['outputs']) for k, v in lineage.items()]
     links = collections.defaultdict(lambda: collections.defaultdict(list))
 
     for name, inputs, outputs in lineage:
@@ -180,13 +185,7 @@ def from_lineage(lineage):
 
 
 if __name__ == '__main__':
-    # unittest.main()
+    unittest.main()
     # g = random_dag(10, 0.5)
     # print(networkx.dag_longest_path(g))
     # print(g.clustering())
-
-    lineage = {'a': {'lineage': {'inputs': [1, 2, 3], 'outputs': [4, 5, 6]}},
-               'b': {'lineage': {'inputs': [4, 5, 6], 'outputs': []}},
-               'c': {'lineage': {'inputs': [5], 'outputs': []}}}
-
-    print(from_lineage(lineage).edges(data=True))
