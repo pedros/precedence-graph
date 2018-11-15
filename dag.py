@@ -2,6 +2,7 @@
 import networkx
 import numpy
 import itertools
+import collections
 
 
 def random_dag(n, p=0.5, weakly_connected=True):
@@ -20,6 +21,8 @@ def random_dag(n, p=0.5, weakly_connected=True):
     assert(networkx.is_directed_acyclic_graph(G))
 
     return G
+
+
 
 
 def _window(seq, n=2):
@@ -75,9 +78,10 @@ class PrecedenceGraph(networkx.DiGraph):
         b_out = set(self.successors(b)).union([b])
 
         return ((a_out.intersection(b_in) == set()) and
-                (a_in.intersection(b_out) == set()))
-               # skip the third condition (shared outputs)
-               # and (a_out.intersection(b_out) == set()) )
+                (a_in.intersection(b_out) == set())
+                # # skip the third condition (shared outputs)
+                # and (a_out.intersection(b_out) == set())
+        )
 
 
 
@@ -85,7 +89,6 @@ class PrecedenceGraph(networkx.DiGraph):
         clusters = []
 
         for (u, v) in _window(networkx.topological_sort(self), 2):
-
             if not self.bernstein(u, v):
                 if not clusters or u not in clusters[-1]:
                     clusters.append([u])
@@ -103,6 +106,7 @@ class PrecedenceGraph(networkx.DiGraph):
         # Unscheduled tasks found. This should not happen.
         assert(len([n for group in clusters for n in group]) == len(self))
 
+        print(clusters)
         return clusters
 
 
@@ -114,8 +118,9 @@ class PrecedenceGraphTest(unittest.TestCase):
         s1 s2 s3
         s2 s4
         s3 s4
+        s4 s5
         ''',
-        [['s1'], ['s2', 's3'], ['s4']])
+        [['s1'], ['s2', 's3'], ['s4'], ['s5']])
 
         # '''
         # s1 s2 s3 s4
@@ -130,13 +135,58 @@ class PrecedenceGraphTest(unittest.TestCase):
         adjlist = self.test_case[0].strip().split('\n')
         g = networkx.parse_adjlist(adjlist,
                                    create_using=PrecedenceGraph())
-
+        print(g.clustering())
         for a, b in zip(self.test_case[1], g.clustering()):
             self.assertSetEqual(set(a), set(b))
 
 
+def from_lineage(lineage):
+    """Return a graph from lineage information.
+
+    Parameters
+    ----------
+    lineage: dictionary of dictionaries
+        A dictionary of dictionaries lineage representation.
+
+    Examples
+    --------
+    >>> lineage = {'a': {'lineage': {'inputs': [1, 2, 3], 'outputs': [4, 5, 6]}},
+                   'b': {'lineage': {'inputs': [4, 5, 6], 'outputs': []}},
+                   'c': {'lineage': {'inputs': [5], 'outputs': []}}}
+    >>> G = from_lineage(lineage)
+    """
+    lineage = [(k, v['lineage']['inputs'], v['lineage']['outputs']) for k, v in lineage.items()]
+    links = collections.defaultdict(lambda: collections.defaultdict(list))
+
+    for name, inputs, outputs in lineage:
+        for i in inputs:
+            links[i]['inputs'].append(name)
+        for o in outputs:
+            links[o]['outputs'].append(name)
+
+    G = PrecedenceGraph()
+
+    for link, v in links.items():
+        for source in v['inputs']:
+            for target in v['outputs']:
+                 if G.has_edge(source, target):
+                     G[source][target]['links'].add(link)
+                 else:
+                     G.add_edge(source, target, links={link})
+
+    assert(networkx.is_directed_acyclic_graph(G))
+
+    return G
+
+
 if __name__ == '__main__':
-    unittest.main()
+    # unittest.main()
     # g = random_dag(10, 0.5)
     # print(networkx.dag_longest_path(g))
     # print(g.clustering())
+
+    lineage = {'a': {'lineage': {'inputs': [1, 2, 3], 'outputs': [4, 5, 6]}},
+               'b': {'lineage': {'inputs': [4, 5, 6], 'outputs': []}},
+               'c': {'lineage': {'inputs': [5], 'outputs': []}}}
+
+    print(from_lineage(lineage).edges(data=True))
