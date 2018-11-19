@@ -4,6 +4,9 @@ import numpy
 import itertools
 import collections
 import unittest
+import logging
+
+logger = logging.getLogger('dag')
 
 
 def random_dag(n, p=0.5, weakly_connected=True):
@@ -174,12 +177,19 @@ def from_lineage(lineage):
     for link, v in links.items():
         for source in v['inputs']:
             for target in v['outputs']:
-                 if G.has_edge(source, target):
-                     G[source][target]['links'].add(link)
+                 if G.has_edge(target, source):
+                     G[target][source]['links'].add(link)
                  else:
-                     G.add_edge(source, target, links={link})
+                     G.add_edge(target, source, links={link})
 
-    assert(networkx.is_directed_acyclic_graph(G))
+
+    logger.warning('removing self loops: {0}'.format([e[0] for e in G.selfloop_edges()]))
+    G.remove_edges_from(G.selfloop_edges())
+
+    while not networkx.is_directed_acyclic_graph(G):
+        cycle = networkx.cycles.find_cycle(G)
+        logger.error('removing cycle: {0}'.format(cycle))
+        G.remove_edges_from(cycle)
 
     return G
 
